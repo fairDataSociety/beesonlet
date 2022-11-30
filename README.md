@@ -1,37 +1,58 @@
-# Beesonlet - Beeson applet
+# FDP Personal Smart Contracts API Architecture
 
-Run verifiable JavaScript apps in the edge using QuickJS/Wasm
+> Note: Experimental, not ready for production
 
-## Install
+Run verifiable JavaScript smart contracts in the edge using QuickJS/Wasm
 
-`npm install @fairdatasociety/beesonlet`
+## Introduction
 
-## Usage
+This project is a prototype of how we can create smart contracts and execute them in userspace, that is, in the edge (Browser, Mobile, etc) and maintain verifiable and privacy features supported by Swarm.
 
-```typescript
-import { BeeSon, Type } from '@fairdatasociety/beeson';
-import { createSignedApplet } from '@fairdatasociety/beesonlet';
+## Architecture
 
+- **JSON-RPC at the edge**: Where Web3 apps or extensions send transactions to the edge smart contract server.
+- **Transaction Executor**: EIP-712 aware transactions are default and  API supports EIP-5559 Cross Chain Write Deferral Protocol and EIP-3668 CCIP Read: Secure offchain data retrieval
+- **FDP Personal Smart Contract**: Compiled to QuickJS/WASM, it executes and stores states in a Swarm Sequential Feed, as BMT Chunks with data serialization using BeeSon.
+- **Verifiable**: BMT verifiable inclusions proofs
+- **Privacy**: FDP provides encrypted data at rest
 
-const src =
+##  Use cases
 
-`const json = [0, 1, 2, 3, 5, 6]
-const beeson = new BeeSon({ json })
-return beeson.serialize()
-`;
+- Data unions
+- L1 and L2 data integrations
+- Oracles
+- Data Privacy
 
-// Create beesonlet with source code and dependencies
-const res = await createSignedApplet(src, {
-    BeeSon
-});
+## Sample
 
+```javascript
+import { Contract, view, call } from './Contract'
 
-const fn = res.fn;
-fn(); // returns Uint8Array
-console.log(res.reference); // returns swarm reference
-console.log(res.bytecode); // returns serialize source code as Uint8Array
+@Contract()
+export class Counter {
+  count = 0
 
+  init() {
+    this.count = 0
+  }
+
+  @call() increase() {
+    this.count += 1
+  }
+
+  @call() decrease() {
+    this.count -= 1
+  }
+
+  @view() getCount() {
+    return this.count
+  }
+}
 ```
+
+## Ideas and inspiration
+
+- Near JavaScript Smart contracts SDK
 
 ## Maintainers
 
