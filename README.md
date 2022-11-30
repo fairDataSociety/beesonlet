@@ -11,7 +11,7 @@ This project is a prototype of how we can create smart contracts and execute the
 ## Architecture
 
 - **JSON-RPC at the edge**: Where Web3 apps or extensions send transactions to the edge smart contract server.
-- **Transaction Executor**: EIP-712 aware transactions are default and  API supports EIP-5559 Cross Chain Write Deferral Protocol and EIP-3668 CCIP Read: Secure offchain data retrieval
+- **Transaction Executor**: `EIP-712` aware transactions are default and API supports `EIP-5559 Cross Chain Write Deferral Protocol` and `EIP-3668 CCIP Read: Secure offchain data retrieval`
 - **FDP Personal Smart Contract**: Compiled to QuickJS/WASM, it executes and stores states in a Swarm Sequential Feed, as BMT Chunks with data serialization using BeeSon.
 - **Verifiable**: BMT verifiable inclusions proofs
 - **Privacy**: FDP provides encrypted data at rest
