@@ -1,19 +1,19 @@
-import { Contract, view, call } from './Contract'
+import { Contract, view, call } from '../Contract'
 
 @Contract()
 export class Counter {
-  count = 0
-
-  init() {
-    this.count = 0
-  }
+  public count = 0
 
   @call() increase() {
     this.count += 1
+
+    return this.count
   }
 
   @call() decrease() {
     this.count -= 1
+
+    return this.count
   }
 
   @view() getCount() {

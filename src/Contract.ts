@@ -1,16 +1,21 @@
 // Inspired by https://github.com/near/near-sdk-js/blob/develop/examples/src/counter-lowlevel.js
+import * as Block from 'multiformats/block'
 import { BeeSon } from '@fairdatasociety/beeson'
 import { makeChunk } from '@fairdatasociety/bmt-js'
 import { FdpStorage } from '@fairdatasociety/fdp-storage'
-import { SequentialFeed } from '../swarm-feeds'
+import { ethers } from 'ethers'
+import { arrayify, hexlify } from 'ethers/lib/utils'
+import { SequentialFeed } from './swarm-feeds'
+import { codec, hasher } from '@fairdatasociety/beeson-multiformats'
+import { BlockDecoder } from 'multiformats/codecs/interface'
+import { JsonValue } from '@fairdatasociety/beeson/dist/types'
 
 /**
  * Defines a block (chunk) stored in the feed.
  */
 interface Block {
-  state: any
-  inclusionProofs: any
-  bmt: any
+  state: Uint8Array | string
+  chunk: any
   timestamp: any
 }
 
@@ -22,6 +27,8 @@ export interface ContractType {
 
   serialize: () => Promise<void>
   deserialize: () => Promise<any>
+
+  getState: () => any
 
   storageRead: (includeProofs?: boolean) => Promise<{ state: unknown }>
   storageWrite: (state: any) => Promise<void>
@@ -36,7 +43,7 @@ function BaseContractMixin<TBase extends Constructor>(Base: TBase) {
     // @ts-ignore
     fdp: FdpStorage
     feed: any
-
+    signer: any
     // @ts-ignore
     topic: string
 
@@ -45,15 +52,15 @@ function BaseContractMixin<TBase extends Constructor>(Base: TBase) {
      * @param includeProofs True if the inclusion proofs should be included in the response.
      * @returns contract state
      */
-    async storageRead(includeProofs?: boolean): Promise<{ state: unknown }> {
-      const feedR = this.feed.makeFeedR(this.topic, this.fdp.account?.wallet?.address)
+    async storageRead(includeProofs?: boolean): Promise<{ state: Uint8Array }> {
+      const feedR = this.feed.makeFeedR(this.topic, this.signer.address)
       const last = await feedR.findLastUpdate()
 
       const data = await this.fdp.connection.bee.downloadData(last.reference)
-      const block = data.json()
+      const block = data.json() as any
 
       return {
-        state: block.state,
+        state: arrayify(block.state),
       }
     }
 
@@ -63,15 +70,14 @@ function BaseContractMixin<TBase extends Constructor>(Base: TBase) {
      * @returns void
      */
     async storageWrite(state: Uint8Array) {
-      const feedRW = this.feed.makeFeedRW(this.topic, this.fdp.account?.wallet)
+      const feedRW = this.feed.makeFeedRW(this.topic, this.signer)
 
       const chunk = makeChunk(state)
 
       const block: Block = {
-        state: chunk.payload,
+        state: hexlify(state),
+        chunk: Buffer.from(chunk.address()).toString('hex'),
         timestamp: Date.now(),
-        inclusionProofs: chunk.inclusionProof,
-        bmt: chunk.bmt,
       }
 
       const reference = await this.fdp.connection.bee.uploadData(
@@ -79,33 +85,47 @@ function BaseContractMixin<TBase extends Constructor>(Base: TBase) {
         JSON.stringify(block),
       )
 
-      return feedRW.setLastUpdate(this.fdp.connection.postageBatchId, reference)
+      return feedRW.setLastUpdate(this.fdp.connection.postageBatchId, reference.reference)
     }
 
     /**
      * Serializes the contract state and writes it to the feed.
      */
-    async serialize() {
-      const state = new BeeSon({
-        json: Object.assign({}, this),
+    async serialize(state = {}) {
+      const value = new BeeSon<JsonValue>({
+        json: state,
       })
+      const block = await Block.encode({ value, codec, hasher })
 
-      const data = state.serialize()
-
-      await this.storageWrite(data)
+      await this.storageWrite(block.bytes)
     }
 
     /** Deserializes the contract state from the feed. */
     async deserialize() {
       const data = await this.storageRead()
 
-      const state = await BeeSon.deserialize(data.state as any)
+      // decode a block
+      const state = await Block.decode({
+        bytes: data.state as Uint8Array,
+        codec: codec as BlockDecoder<252, BeeSon<JsonValue>>,
+        hasher,
+      })
 
-      if (state) {
-        return Object.assign(this, state)
-      } else {
-        return this
-      }
+      const res = await state.value
+
+      return res.json
+    }
+
+    // get state
+    getState() {
+      const { fdp, feed, signer, topic, ...state } = this
+
+      return state
+    }
+
+    // set state
+    setState(state: object) {
+      Object.assign(this, state)
     }
   }
 }
@@ -114,14 +134,19 @@ function BaseContractMixin<TBase extends Constructor>(Base: TBase) {
 export function Contract() {
   return <T extends { new (...args: any[]): any }>(target: T) => {
     return class extends target {
-      static _create(fdp: FdpStorage, seqFeed: typeof SequentialFeed, topic: string, signer: any) {
+      _createInstance(fdp: FdpStorage, seqFeed: typeof SequentialFeed, topic: string, signer: any) {
         const withMixins = BaseContractMixin(target)
         const instance = new withMixins()
-
+        const wallet = new ethers.Wallet(fdp.account.wallet?.privateKey!)
         instance.fdp = fdp
         instance.feed = seqFeed
-        instance.signer = signer
+        // instance.signer = signer
         instance.topic = topic
+
+        instance.signer = {
+          sign: wallet.signMessage.bind(wallet),
+          address: arrayify(fdp.account.wallet?.address!),
+        }
 
         return instance
       }
@@ -141,10 +166,9 @@ export function call(options: { gas?: number } = {}) {
     const original = _descriptor.value
 
     _descriptor.value = function (...args: any[]) {
-      const thisArg = Object.bind(this, this._state)
-      const result = original.call(thisArg, ...args)
+      const result = original.bind(this)(...args)
 
-      return result
+      return { result, isView: false }
     }
   }
 }
@@ -157,17 +181,13 @@ export function view() {
     _key: string | symbol,
     _descriptor: PropertyDescriptor,
     // eslint-disable-next-line @typescript-eslint/no-empty-function
-  ): void {
+  ) {
     const original = _descriptor.value
-    // @ts-ignore
-    this.deserialize().then(state => {
-      _descriptor.value = function (...args: any[]) {
-        // @ts-ignore
-        const thisArg = Object.bind(this, state)
-        const result = original.call(thisArg, ...args)
 
-        return result
-      }
-    })
+    _descriptor.value = function (...args: any[]) {
+      const result = original.bind(this)(...args)
+
+      return { result, isView: true }
+    }
   }
 }

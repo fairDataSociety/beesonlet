@@ -1,24 +1,17 @@
 {
-  "include": ["src"],
   "compilerOptions": {
-    "alwaysStrict": true,
-    "target": "ES2020",
-    "esModuleInterop": true,
-    "allowSyntheticDefaultImports": true,
-    "moduleResolution": "node",
-    "module": "CommonJS",
-    "strict": true,
-    "resolveJsonModule": true,
     "experimentalDecorators": true,
+    "outDir": "./dist/",
+    "noImplicitAny": true,
+    "module": "es6",
+    "target": "es5",
+    "jsx": "react",
     "skipLibCheck": true,
-    "emitDecoratorMetadata": true,
-    "typeRoots": ["./src/types", "node_modules/@types"],
-    "rootDirs": ["src"],
-    "outDir": "dist",
-    "noImplicitAny": false,
+    "lib": ["ES2015"],
     "allowJs": true,
-    "suppressImplicitAnyIndexErrors": true
-  },
-
-  "exclude": ["../node_modules", "../node_modules/file-system-access"]
+    "strict": true,
+    "noImplicitReturns": true,
+    "moduleResolution": "node",
+    "esModuleInterop": true
+  }
 }
